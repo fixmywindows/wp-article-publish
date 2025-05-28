@@ -1,3 +1,5 @@
+// /pages/api/generate.js
+
 export default async function handler(req, res) {
   if (req.query.secret !== process.env.APP_SECRET) {
     return res.status(401).json({ message: 'Unauthorized' });
@@ -8,7 +10,19 @@ export default async function handler(req, res) {
   }
 
   try {
-    const data = req.body;
+    let data = req.body;
+
+    if (typeof data === 'string') {
+      try {
+        data = JSON.parse(data);
+      } catch (parseError) {
+        return res.status(400).json({ message: 'Invalid JSON format' });
+      }
+    }
+
+    if (!Array.isArray(data.products)) {
+      return res.status(400).json({ message: 'Missing or invalid products array' });
+    }
 
     const numProducts = data.products.length;
     const adjustedTitle = data.title.replace("X", numProducts.toString());
@@ -32,6 +46,7 @@ export default async function handler(req, res) {
       if (product.link.includes("amazon")) buttonText = "Buy on Amazon";
       else if (product.link.includes("etsy")) buttonText = "Buy on Etsy";
       else if (product.link.includes("ebay")) buttonText = "Buy on eBay";
+      else buttonText = "Buy here";
 
       htmlParts.push(`<p><a href='${product.link}' target='_blank' style='display:inline-block;padding:10px 20px;background-color:#333;color:#fff;text-decoration:none;border-radius:4px;'>${buttonText}</a></p>`);
     }
