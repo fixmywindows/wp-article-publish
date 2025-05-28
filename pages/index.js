@@ -1,4 +1,6 @@
-import { useState } from 'react';
+// pages/index.js
+
+import { useState, useEffect } from 'react';
 
 export default function Home({ secret }) {
   const [input, setInput] = useState('');
@@ -6,6 +8,17 @@ export default function Home({ secret }) {
   const [error, setError] = useState('');
   const [posting, setPosting] = useState(false);
   const [publishedLink, setPublishedLink] = useState('');
+  const [categories, setCategories] = useState([]);
+  const [tags, setTags] = useState([]);
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [selectedTags, setSelectedTags] = useState([]);
+  const [imageFile, setImageFile] = useState(null);
+  const [featuredImageId, setFeaturedImageId] = useState(null);
+
+  useEffect(() => {
+    fetch('/api/categories').then(res => res.json()).then(setCategories);
+    fetch('/api/tags').then(res => res.json()).then(setTags);
+  }, []);
 
   const handleGenerate = async () => {
     try {
@@ -19,6 +32,8 @@ export default function Home({ secret }) {
         setOutput(data);
         setError('');
         setPublishedLink('');
+        setSelectedCategories(data.categories || []);
+        setSelectedTags(data.tags || []);
       } else {
         setError(data.message);
       }
@@ -27,11 +42,35 @@ export default function Home({ secret }) {
     }
   };
 
+  const toggleItem = (item, list, setList) => {
+    setList(prev =>
+      prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]
+    );
+  };
+
+  const uploadImage = async () => {
+    if (!imageFile) return;
+    const formData = new FormData();
+    formData.append('file', imageFile);
+
+    const res = await fetch('/api/upload-image', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json();
+    if (res.ok) {
+      setFeaturedImageId(data.id);
+    } else {
+      alert(`❌ Image upload failed: ${data.message}`);
+    }
+  };
+
   const postToWordPress = async () => {
     if (!output) return;
 
     setPosting(true);
     setPublishedLink('');
+    if (imageFile && !featuredImageId) await uploadImage();
 
     try {
       const res = await fetch('/api/post-to-wp', {
@@ -41,9 +80,9 @@ export default function Home({ secret }) {
           title: output.title,
           content: output.html,
           summary: output.summary,
-          categories: output.categories || [],
-          tags: output.tags || [],
-          featured_image_id: output.featured_image_id || null
+          categories: selectedCategories,
+          tags: selectedTags,
+          featured_image_id: featuredImageId
         })
       });
 
@@ -88,6 +127,48 @@ export default function Home({ secret }) {
           <h2>Metadata JSON</h2>
           <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(output, null, 2)}</pre>
 
+          <h3>Choose Categories</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {categories.map(cat => (
+              <button
+                key={cat.id}
+                onClick={() => toggleItem(cat.id, selectedCategories, setSelectedCategories)}
+                style={{
+                  backgroundColor: selectedCategories.includes(cat.id) ? '#2563eb' : '#eee',
+                  color: selectedCategories.includes(cat.id) ? 'white' : 'black',
+                  padding: '5px 10px',
+                  border: '1px solid #ccc',
+                  borderRadius: 5
+                }}
+              >
+                {cat.name}
+              </button>
+            ))}
+          </div>
+
+          <h3>Choose Tags</h3>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+            {tags.map(tag => (
+              <button
+                key={tag.id}
+                onClick={() => toggleItem(tag.id, selectedTags, setSelectedTags)}
+                style={{
+                  backgroundColor: selectedTags.includes(tag.id) ? '#10b981' : '#eee',
+                  color: selectedTags.includes(tag.id) ? 'white' : 'black',
+                  padding: '5px 10px',
+                  border: '1px solid #ccc',
+                  borderRadius: 5
+                }}
+              >
+                {tag.name}
+              </button>
+            ))}
+          </div>
+
+          <h3>Featured Image</h3>
+          <input type="file" onChange={(e) => setImageFile(e.target.files[0])} />
+          {featuredImageId && <p>✅ Image uploaded and ready to publish</p>}
+
           <button
             onClick={postToWordPress}
             disabled={posting}
@@ -121,9 +202,7 @@ export default function Home({ secret }) {
 export async function getServerSideProps(context) {
   const secret = context.query.secret || '';
   if (secret !== process.env.APP_SECRET) {
-    return {
-      notFound: true
-    };
+    return { notFound: true };
   }
   return { props: { secret } };
 }
