@@ -1,5 +1,3 @@
-// /pages/api/upload-image.js
-
 import formidable from 'formidable';
 import fs from 'fs';
 
